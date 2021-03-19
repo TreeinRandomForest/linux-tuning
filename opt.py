@@ -2,21 +2,42 @@ import numpy as np
 import subprocess
 from dragonfly import load_config, maximize_function
 
-def objective(**kwargs):
+CONF_FILE_TEMPLATE = 'ml-perf-harness.conf.template'
+CONF_FILE = 'ml-perf.harness.conf'
+
+def objective(arr, domain=None):
+    assert(len(arr)==len(domain))
+
+    kwargs = {a['name']:b for (a,b) in zip(domain, arr)}
+    #should also include fixed arguments
+
+    write_config(outfile=CONF_FILE, templatefile=CONF_FILE_TEMPLATE, **kwargs)
     valid = check_config()
     if not valid:
         raise ValueError("Configuration is not valid")
-
-    write_config(**kwargs)
 
     o = subprocess.run(['bash', 'ml-perf-harness.sh', '-t', 'seq-disk-perf.sh'], capture_output=True)
     o = [float(i) for i in o.stdout.decode('utf-8').split('\n') if len(i) > 0]
 
     return np.mean(o)
 
-def write_config(outfile='settings.conf', **kwargs):
-    with open(outfile, 'w') as f:
-        print(kwargs['val'], file=f)
+def write_config(outfile='settings.conf', templatefile=None, **kwargs):
+    if templatefile is None:    
+        with open(outfile, 'w') as f:
+            print(kwargs['val'], file=f)
+
+    else:
+        with open(templatefile, 'r') as f:
+            lines = f.readlines()
+
+        with open(outfile, 'w') as f:            
+            for l in lines:
+                l_split = l.split('=')
+
+                if l_split[0] in kwargs:
+                    print(l.rstrip('\n').replace("{" + l_split[0]+"_VAL}", str(kwargs[l_split[0]])), file=f)
+                else:
+                    print(l.rstrip('\n'), file=f)
 
 def check_config():
     o = subprocess.run(['bash', 'ml-perf-harness.sh', '-c'], capture_output=True)
@@ -51,4 +72,3 @@ def optimization_loop(capital=10):
 
     return val, point, history
 
-print(objective(val=3))
