@@ -41,6 +41,7 @@ def write_config(outfile='settings.conf', templatefile=None, default_vals = {}, 
                 print(f'{key}={params.get(key, default_vals.get(key, -999))}', file=f)
 
             else:
+                #should never enter here but protection for future changes
                 raise ValueError(f"ERROR: {l}")
 
 def check_config():
