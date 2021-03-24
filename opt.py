@@ -13,6 +13,7 @@ def objective(arr, domain=None):
 
     write_config(outfile=CONF_FILE, templatefile=CONF_FILE_TEMPLATE, **kwargs)
     valid = check_config()
+
     if not valid:
         raise ValueError("Configuration is not valid")
 
@@ -21,25 +22,30 @@ def objective(arr, domain=None):
 
     return np.mean(o)
 
-def write_config(outfile='settings.conf', templatefile=None, **kwargs):
-    if templatefile is None:    
-        with open(outfile, 'w') as f:
-            print(kwargs['val'], file=f)
+def write_config(outfile='settings.conf', templatefile=None, default_vals = {}, params = {}):
+    '''write passed config values to file
+    '''
+    #read data from template file
+    with open(templatefile, 'r') as f:
+        lines = f.readlines()
 
-    else:
-        with open(templatefile, 'r') as f:
-            lines = f.readlines()
+    #fill in vars from params and write to outfile
+    with open(outfile, 'w') as f:
+        for l in lines:
+            if l.find('{')==-1:
+                print(l.rstrip("\n"), file=f)
 
-        with open(outfile, 'w') as f:            
-            for l in lines:
+            elif l.find('{')>-1: #bayesopt params
                 l_split = l.split('=')
+                key = l_split[0]
+                print(f'{key}={params.get(key, default_vals.get(key, -999))}', file=f)
 
-                if l_split[0] in kwargs:
-                    print(l.rstrip('\n').replace("{" + l_split[0]+"_VAL}", str(kwargs[l_split[0]])), file=f)
-                else:
-                    print(l.rstrip('\n'), file=f)
+            else:
+                raise ValueError(f"ERROR: {l}")
 
 def check_config():
+    '''ensure written config is valid
+    '''
     o = subprocess.run(['bash', 'ml-perf-harness.sh', '-c'], capture_output=True)
     o = o.stdout.decode('utf-8')
     
@@ -47,7 +53,9 @@ def check_config():
         return True
     return False
 
-def parse_vars(filename, vals={}):
+def read_vars(filename, vals={}):
+    '''read var values from file
+    '''
     with open(filename) as f:
         lines = f.readlines()
         for l in lines:
@@ -62,8 +70,10 @@ def parse_vars(filename, vals={}):
     return vals
 
 def optimization_loop(capital=10):
-    vals = parse_vars('limits.sh')
-    vals = parse_vars('ml-perf-harness.conf', vals=vals)
+    vals_limits = read_vars('limits.sh')
+    vals = read_vars('ml-perf-harness.conf', vals=vals_limits)
+
+    vals_default = read_vars('default.conf', vals=vals_limits)
 
     domain = {}
 
