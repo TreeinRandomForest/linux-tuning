@@ -1,9 +1,11 @@
 import numpy as np
-import subprocess
+import subprocess, os, shutil
 from dragonfly import load_config, maximize_function
 
 CONF_FILE_TEMPLATE = 'ml-perf-harness.conf.template'
 CONF_FILE = 'ml-perf.harness.conf'
+LOC = 'conf_files'
+it = 0
 
 def objective(arr, domain=None, default_vals=None):
     '''Objective function used by bayes opt
@@ -15,6 +17,9 @@ def objective(arr, domain=None, default_vals=None):
     '''
 
     assert(len(arr)==len(domain))
+
+    global it
+    it += 1
 
     arr = [val[0] for val in arr] #since dragonfly wraps each val with dim=1 by default
 
@@ -30,7 +35,9 @@ def objective(arr, domain=None, default_vals=None):
     o = subprocess.run(['bash', 'ml-perf-harness.sh', '-t', 'seq-disk-perf.sh'], capture_output=True)
     o = [float(i) for i in o.stdout.decode('utf-8').split('\n') if len(i) > 0]
 
-    return np.mean(o)
+    shutil.copyfile(CONF_FILE, f'{LOC}/{CONF_FILE}.{it}')
+
+    return -np.mean(o)
 
 def write_config(outfile='settings.conf', templatefile=None, default_vals = {}, params = {}):
     '''write passed config values to file
@@ -86,18 +93,27 @@ def optimization_loop(capital=10):
 
     vals_default = read_vars('default.conf', vals=vals_limits)
 
-    domain = [{'name': 'MAX_SECTORS_KB', 'type': 'int', 'min': 1, 'max': 256, 'dim': 1},
+    domain = [
+                {'name': 'READ_LAT_NSEC', 'type': 'int', 'min': 0, 'max': 100000000, 'dim': 1},
+                {'name': 'WRITE_LAT_NSEC', 'type': 'int', 'min': 0, 'max': 100000000, 'dim': 1},
+                {'name': 'NR_REQUESTS', 'type': 'int', 'min': 4, 'max': 10000, 'dim': 1}, #queue depth
+                {'name': 'MAX_SECTORS_KB', 'type': 'int', 'min': 128, 'max': 1280, 'dim': 1}, #max IO size sent to device
+                {'name': 'READ_AHEAD_KB', 'type': 'int', 'min': 0, 'max': 10000, 'dim': 1}, #amount of IO to read ahead into cache
+                {'name': 'WBT_LAT_USEC', 'type': 'int', 'min': 0, 'max': 10000, 'dim': 1}, #target latency for reads. throttle writes otherwise
+                {'name': 'DIRTY_RATIO', 'type': 'int', 'min': 0, 'max': 100, 'dim': 1},
+                {'name': 'DIRTY_BACKGROUND_RATIO', 'type': 'int', 'min': 0, 'max': 100, 'dim': 1},
+                {'name': 'SWAPPINESS', 'type': 'int', 'min': 0, 'max': 100, 'dim': 1},
             ]
     
-    def objective_temp(x):
-        return -(x[0]-100)**2
-
-
     config = load_config({'domain': domain})
 
     objective_partial = lambda x: objective(x, domain=domain, default_vals=vals_default)
     
-    val, point, history = maximize_function(objective_partial, config.domain, capital, config=config)
 
+    if not os.path.exists(LOC):    
+        os.makedirs(LOC)
+
+    val, point, history = maximize_function(objective_partial, config.domain, capital, config=config)
+    
     return val, point, history
 
