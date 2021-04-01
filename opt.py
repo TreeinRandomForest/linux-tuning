@@ -1,5 +1,5 @@
 import numpy as np
-import subprocess, os, shutil
+import subprocess, os, shutil, pickle
 from dragonfly import load_config, maximize_function
 
 CONF_FILE_TEMPLATE = 'ml-perf-harness.conf.template'
@@ -94,8 +94,8 @@ def read_vars(filename, vals={}):
                 continue
     return vals
 
-def scan_loop(n_iter=None):
-    vars_to_loop = [{'name': 'READ_AHEAD_KB', 'type': 'int', 'min': 0, 'max': 3, 'step_size': 1, 'dim': 1}]
+def scan_loop(n_iter=None, minval=0, maxval=10):
+    vars_to_loop = [{'name': 'READ_AHEAD_KB', 'type': 'int', 'min': minval, 'max': maxval, 'step_size': 1, 'dim': 1}]
 
     vals_limits = read_vars('limits.sh')
     vals_default = read_vars('default.conf', vals=vals_limits)
@@ -112,6 +112,7 @@ def scan_loop(n_iter=None):
             metric_mean, metric_std = objective_partial([[x]])
             results[var['name']][x] = (metric_mean, metric_std)
             print(x, metric_mean, metric_std)
+            #plt.errorbar(x.keys(), [i[0] for i in x.values()], [i[1] for i in x.values()]) 
 
     return results
 
@@ -145,3 +146,5 @@ def optimization_loop(capital=10):
     
     return val, point, history
 
+r = scan_loop(n_iter=10, minval=0, maxval=2)
+pickle.dump(r, open('read_ahead_kb_scan.pkl', 'wb'))
